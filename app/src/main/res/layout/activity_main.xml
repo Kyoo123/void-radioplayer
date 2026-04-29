@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="24dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageButton
+            android:id="@+id/playButton"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_play"
+            android:backgroundTint="#506169"
+            app:tint="@android:color/white"
+            android:contentDescription="@string/play"/>
+
+        <ImageButton
+            android:id="@+id/stopButton"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_pause"
+            android:backgroundTint="#506169"
+            app:tint="@android:color/white"
+            android:layout_marginTop="12dp"
+            android:contentDescription="@string/pause"/>
+
+        <TextView
+            android:id="@+id/serverStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/server_status"
+            android:textColor="#506169"
+            android:textSize="16sp"
+            android:layout_marginTop="32dp"/>
+
+
+
+        <TextView
+            android:id="@+id/timeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/time"
+            android:textColor="#506169"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp"/>
+
+        <TextView
+            android:id="@+id/nowPlayingText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/now_playing"
+            android:textColor="#506169"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp"/>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">RetroPlayer</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="server_status">Server: —</string>
+    <string name="time">Time: —</string>
+    <string name="now_playing">Now playing: Retro Radio</string>
+</resources>

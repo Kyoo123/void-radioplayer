@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">RetroPlayer</string>
+    <string name="play">Lejátszás</string>
+    <string name="pause">Szünet</string>
+
+    <string name="server_status">Szerver: —</string>
+    <string name="time">Idő: —</string>
+    <string name="now_playing">Most szól: RetroRadio</string>
+
+</resources>
