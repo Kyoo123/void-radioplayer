@@ -293,6 +293,6 @@ Built by **Kyo / voidcore**
 
 <div align="center">
 
-made with questionable decisions and working code™
+made with questionable decisions, no caffeine and working code™(somehow)
 
 </div>
