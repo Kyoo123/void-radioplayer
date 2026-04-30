@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
@@ -118,12 +119,18 @@ class RadioService : Service() {
     private fun startPlayback(url: String) {
         if (url.isBlank()) return
         val path = url.substringBefore("?").lowercase()
-        // .m3u8 = HLS, handled natively by ExoPlayer (media3-exoplayer-hls)
-        // .m3u  = plain playlist, must be resolved to the actual stream URL first
-        if (path.endsWith(".m3u") && !path.endsWith(".m3u8")) {
-            resolveM3uAndPlay(url)
-        } else {
-            playDirect(url)
+        when {
+            // Known audio formats — ExoPlayer handles directly via ProgressiveMediaSource
+            path.endsWith(".mp3") || path.endsWith(".aac") || path.endsWith(".ogg") ||
+            path.endsWith(".flac") || path.endsWith(".wav") || path.endsWith(".opus") ->
+                playDirect(url)
+            // Adaptive formats — ExoPlayer knows from extension alone
+            path.endsWith(".m3u8") -> playWithMime(url, MimeTypes.APPLICATION_M3U8)
+            path.endsWith(".mpd")  -> playWithMime(url, MimeTypes.APPLICATION_MPD)
+            // Plain playlist — must resolve to the actual stream URL first
+            path.endsWith(".m3u")  -> resolveM3uAndPlay(url)
+            // Unknown — probe Content-Type via HEAD so ExoPlayer gets the right hint
+            else -> probeAndPlay(url)
         }
     }
 
@@ -131,6 +138,49 @@ class RadioService : Service() {
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
         player.play()
+    }
+
+    private fun playWithMime(url: String, mimeType: String) {
+        player.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(mimeType).build())
+        player.prepare()
+        player.play()
+    }
+
+    private fun probeAndPlay(url: String) {
+        val handler = Handler(Looper.getMainLooper())
+        Thread {
+            try {
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.requestMethod = "HEAD"
+                conn.connectTimeout = 8_000
+                conn.readTimeout = 8_000
+                conn.setRequestProperty("User-Agent", "RetroPlayer/1.0 (Android)")
+                conn.setRequestProperty("Accept", "*/*")
+                conn.instanceFollowRedirects = true
+                conn.connect()
+                val ct = conn.contentType?.lowercase() ?: ""
+                val finalUrl = conn.url.toString()
+                val finalPath = finalUrl.substringBefore("?").lowercase()
+                conn.disconnect()
+
+                handler.post {
+                    when {
+                        finalPath.endsWith(".m3u8") ||
+                        (ct.contains("mpegurl") && ct.contains("apple")) ->
+                            playWithMime(finalUrl, MimeTypes.APPLICATION_M3U8)
+                        finalPath.endsWith(".mpd") || ct.contains("dash") ->
+                            playWithMime(finalUrl, MimeTypes.APPLICATION_MPD)
+                        finalPath.endsWith(".m3u") || ct.contains("mpegurl") ->
+                            resolveM3uAndPlay(finalUrl)
+                        else ->
+                            playDirect(finalUrl)
+                    }
+                }
+            } catch (e: Exception) {
+                // HEAD not supported by server — try direct and let ExoPlayer sniff
+                handler.post { playDirect(url) }
+            }
+        }.start()
     }
 
     private fun resolveM3uAndPlay(m3uUrl: String) {
