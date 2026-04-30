@@ -63,8 +63,12 @@ class RadioService : Service() {
         // Start Foreground immediately to prevent system killing service
         startForeground(1, createNotification())
 
+        val prefs = getSharedPreferences("stream_prefs", MODE_PRIVATE)
+        val url = prefs.getString("stream_url", BuildConfig.PRIMARY_STREAM_URL)
+            ?: BuildConfig.PRIMARY_STREAM_URL
+
         broadcastServerStatus("playing")
-        startPlayback(BuildConfig.PRIMARY_STREAM_URL)
+        startPlayback(url)
 
         return START_STICKY
     }
@@ -79,7 +83,7 @@ class RadioService : Service() {
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("RetroPlayer")
+            .setContentTitle("VoidRadio")
             .setContentText("Playing Live Radio")
             .setSmallIcon(R.drawable.ic_launcher_foreground) // Ensure this exists!
             .setOngoing(true)

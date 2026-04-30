@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">RetroPlayer</string>
+    <string name="app_name">VoidRadio</string>
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="server_status">Server: —</string>

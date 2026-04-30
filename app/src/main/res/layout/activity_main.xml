@@ -6,7 +6,7 @@
     android:layout_height="match_parent">
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
@@ -63,6 +63,33 @@
             android:textColor="#506169"
             android:textSize="16sp"
             android:layout_marginTop="12dp"/>
+
+        <Spinner
+            android:id="@+id/stationSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#506169" />
+
+        <EditText
+            android:id="@+id/customUrlInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Stream URL (e.g. https://...)"
+            android:inputType="textUri"
+            android:textColor="#506169"
+            android:textColorHint="#80506169"
+            android:visibility="gone"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/applyButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Apply"
+            android:backgroundTint="#506169"
+            android:textColor="@android:color/white"
+            android:layout_marginTop="8dp" />
 
     </LinearLayout>
 
