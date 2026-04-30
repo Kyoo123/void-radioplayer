@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.*
 import android.view.View
 import android.widget.*
@@ -13,30 +17,25 @@ import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
 import java.util.*
 
-
 class MainActivity : AppCompatActivity() {
 
-    private val stations = listOf(
-        "Retro Radio"         to "https://icast.connectmedia.hu/5001/live.mp3",
-        "SomaFM: Groove Salad" to "https://ice1.somafm.com/groovesalad-256-mp3",
-        "SomaFM: Lush"        to "https://ice1.somafm.com/lush-128-mp3",
-        "KEXP 90.3"           to "https://kexp-mp3-128.streamguys1.com/kexp128.mp3",
-        "Radio Paradise"      to "https://stream.radioparadise.com/mp3-128",
-        "Custom..."           to ""
-    )
-    private val CUSTOM_INDEX get() = stations.size - 1
-
-    // UI
+    private lateinit var playPauseButton: ImageButton
+    private lateinit var networkErrorRing: View
     private lateinit var timeText: TextView
     private lateinit var serverStatusText: TextView
     private lateinit var nowPlayingText: TextView
-    private lateinit var stationSpinner: Spinner
-    private lateinit var customUrlInput: EditText
     private lateinit var prefs: SharedPreferences
+
     private var isServiceRunning = false
     private var isServerReceiverRegistered = false
+    private var isNetworkAvailable = true
+    private var wasPlayingBeforeNetworkLoss = false
+    private var hasStreamError = false
 
-    // Time handling
+    private val connectivityManager by lazy {
+        getSystemService(ConnectivityManager::class.java)
+    }
+
     private val timeFormatter = SimpleDateFormat("HH:mm • dd MMM yyyy", Locale.getDefault())
     private val timeHandler = Handler(Looper.getMainLooper())
     private val timeRunnable = object : Runnable {
@@ -46,24 +45,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            runOnUiThread {
+                isNetworkAvailable = true
+                updateErrorRing()
+                if (wasPlayingBeforeNetworkLoss && !isServiceRunning) {
+                    wasPlayingBeforeNetworkLoss = false
+                    startForegroundService(Intent(this@MainActivity, RadioService::class.java))
+                }
+            }
+        }
+
+        override fun onLost(network: Network) {
+            runOnUiThread {
+                isNetworkAvailable = false
+                if (isServiceRunning) wasPlayingBeforeNetworkLoss = true
+                updateErrorRing()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         prefs = getSharedPreferences("stream_prefs", Context.MODE_PRIVATE)
 
-        val playButton = findViewById<ImageButton>(R.id.playButton)
-        val stopButton = findViewById<ImageButton>(R.id.stopButton)
-        val applyButton = findViewById<Button>(R.id.applyButton)
+        playPauseButton = findViewById(R.id.playPauseButton)
+        networkErrorRing = findViewById(R.id.networkErrorRing)
         timeText = findViewById(R.id.timeText)
         serverStatusText = findViewById(R.id.serverStatusText)
         nowPlayingText = findViewById(R.id.nowPlayingText)
-        stationSpinner = findViewById(R.id.stationSpinner)
-        customUrlInput = findViewById(R.id.customUrlInput)
 
         serverStatusText.text = "Server: idle"
 
-        setupSpinner()
+        ensureDefaultStation()
+        updateNowPlayingLabel()
 
         registerReceiver(
             serverStatusReceiver,
@@ -75,72 +93,64 @@ class MainActivity : AppCompatActivity() {
         createNotificationChannel()
         timeHandler.post(timeRunnable)
 
-        playButton.setOnClickListener {
-            startForegroundService(Intent(this, RadioService::class.java))
-        }
+        checkInitialNetworkState()
+        val networkRequest = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
 
-        stopButton.setOnClickListener {
-            stopService(Intent(this, RadioService::class.java))
-        }
-
-        applyButton.setOnClickListener {
-            applyStation()
-        }
-    }
-
-    private fun setupSpinner() {
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, stations.map { it.first })
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        stationSpinner.adapter = adapter
-
-        val savedIndex = prefs.getInt("station_index", 0)
-        stationSpinner.setSelection(savedIndex)
-
-        if (savedIndex == CUSTOM_INDEX) {
-            customUrlInput.visibility = View.VISIBLE
-            customUrlInput.setText(prefs.getString("custom_url", ""))
-        }
-
-        updateNowPlayingLabel(savedIndex)
-
-        stationSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                customUrlInput.visibility = if (position == CUSTOM_INDEX) View.VISIBLE else View.GONE
+        playPauseButton.setOnClickListener {
+            if (isServiceRunning) {
+                stopService(Intent(this, RadioService::class.java))
+            } else {
+                wasPlayingBeforeNetworkLoss = false
+                startForegroundService(Intent(this, RadioService::class.java))
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        findViewById<ImageButton>(R.id.editStationsButton).setOnClickListener {
+            StationManagerDialog().show(supportFragmentManager, "stations")
         }
     }
 
-    private fun applyStation() {
-        val index = stationSpinner.selectedItemPosition
-        val url = if (index == CUSTOM_INDEX) {
-            customUrlInput.text.toString().trim()
-        } else {
-            stations[index].second
+    private fun ensureDefaultStation() {
+        if (prefs.getString("stream_url", null) == null) {
+            val first = loadStations(prefs).firstOrNull()
+            if (first != null) {
+                prefs.edit().putString("stream_url", first.url).apply()
+            }
         }
+    }
 
-        if (url.isEmpty()) {
-            Toast.makeText(this, "Enter a stream URL", Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun checkInitialNetworkState() {
+        val caps = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+        isNetworkAvailable = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        updateErrorRing()
+    }
 
-        prefs.edit()
-            .putInt("station_index", index)
-            .putString("custom_url", if (index == CUSTOM_INDEX) url else "")
-            .putString("stream_url", url)
-            .apply()
+    private fun updateErrorRing() {
+        val showRing = !isNetworkAvailable || hasStreamError
+        networkErrorRing.visibility = if (showRing) View.VISIBLE else View.GONE
+    }
 
-        updateNowPlayingLabel(index)
+    private fun updatePlayPauseIcon() {
+        playPauseButton.setImageResource(
+            if (isServiceRunning) R.drawable.ic_pause else R.drawable.ic_play
+        )
+    }
 
+    fun onStationSelectedFromDialog(station: Station) {
+        nowPlayingText.text = "Now playing: ${station.name}"
         if (isServiceRunning) {
             stopService(Intent(this, RadioService::class.java))
             startForegroundService(Intent(this, RadioService::class.java))
         }
     }
 
-    private fun updateNowPlayingLabel(index: Int) {
-        val name = if (index == CUSTOM_INDEX) "Custom" else stations[index].first
-        nowPlayingText.text = "Now playing: $name"
+    private fun updateNowPlayingLabel() {
+        val url = prefs.getString("stream_url", "") ?: ""
+        val station = loadStations(prefs).find { it.url == url }
+        nowPlayingText.text = "Now playing: ${station?.name ?: "—"}"
     }
 
     override fun onDestroy() {
@@ -149,6 +159,11 @@ class MainActivity : AppCompatActivity() {
         if (isServerReceiverRegistered) {
             unregisterReceiver(serverStatusReceiver)
             isServerReceiverRegistered = false
+        }
+        try {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            // already unregistered
         }
     }
 
@@ -166,11 +181,27 @@ class MainActivity : AppCompatActivity() {
 
     private val serverStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_SERVER_STATUS) {
-                val status = intent.getStringExtra(EXTRA_SERVER_STATUS)
-                serverStatusText.text = "Server: $status"
-                isServiceRunning = status == "playing"
+            if (intent?.action != ACTION_SERVER_STATUS) return
+            val status = intent.getStringExtra(EXTRA_SERVER_STATUS)
+            when (status) {
+                "playing" -> {
+                    isServiceRunning = true
+                    hasStreamError = false
+                    serverStatusText.text = "Server: playing"
+                }
+                "error" -> {
+                    isServiceRunning = true
+                    hasStreamError = true
+                    serverStatusText.text = "Server: reconnecting…"
+                }
+                "idle" -> {
+                    isServiceRunning = false
+                    hasStreamError = false
+                    serverStatusText.text = "Server: idle"
+                }
             }
+            updatePlayPauseIcon()
+            updateErrorRing()
         }
     }
 }
