@@ -34,7 +34,8 @@
                     android:layout_height="64dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_play"
-                    android:backgroundTint="#506169"
+                    android:background="@drawable/btn_round"
+                    android:foreground="?android:attr/selectableItemBackgroundBorderless"
                     app:tint="@android:color/white"
                     android:contentDescription="Play/Pause"/>
 
@@ -52,11 +53,12 @@
             <!-- Pencil/edit stations button -->
             <ImageButton
                 android:id="@+id/editStationsButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="12dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_marginStart="16dp"
                 android:src="@drawable/ic_pencil"
-                android:backgroundTint="#506169"
+                android:background="@drawable/btn_round"
+                android:foreground="?android:attr/selectableItemBackgroundBorderless"
                 app:tint="@android:color/white"
                 android:contentDescription="Edit Stations"/>
 
@@ -67,7 +69,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/server_status"
-            android:textColor="#506169"
+            android:textColor="#C9D1D9"
             android:textSize="16sp"
             android:layout_marginTop="32dp"/>
 
@@ -76,7 +78,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/time"
-            android:textColor="#506169"
+            android:textColor="#C9D1D9"
             android:textSize="16sp"
             android:layout_marginTop="12dp"/>
 
@@ -85,7 +87,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/now_playing"
-            android:textColor="#506169"
+            android:textColor="#C9D1D9"
             android:textSize="16sp"
             android:layout_marginTop="12dp"/>
 

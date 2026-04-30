@@ -6,12 +6,16 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.*
 import androidx.fragment.app.DialogFragment
 import android.view.View
+import java.net.HttpURLConnection
+import java.net.URL
 
 class StationManagerDialog : DialogFragment() {
 
@@ -52,7 +56,7 @@ class StationManagerDialog : DialogFragment() {
             text = "Add Station"
             textSize = 13f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(0xFF506169.toInt())
+            setTextColor(0xFFC9D1D9.toInt())
         })
 
         val categoryLabels = arrayOf("English", "German", "Hungarian", "Custom")
@@ -69,14 +73,14 @@ class StationManagerDialog : DialogFragment() {
         }
 
         val nameInput = EditText(ctx).apply {
-            hint = "Station name"
+            hint = "Station name (not needed for .m3u)"
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also { it.topMargin = dp(6) }
         }
 
         val urlInput = EditText(ctx).apply {
-            hint = "Stream URL (https://…)"
+            hint = "Stream URL or .m3u playlist URL"
             inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI or
                     android.text.InputType.TYPE_CLASS_TEXT
             layoutParams = LinearLayout.LayoutParams(
@@ -92,17 +96,25 @@ class StationManagerDialog : DialogFragment() {
             setOnClickListener {
                 val name = nameInput.text.toString().trim()
                 val url = urlInput.text.toString().trim()
-                if (name.isEmpty() || url.isEmpty()) {
-                    Toast.makeText(ctx, "Enter name and URL", Toast.LENGTH_SHORT).show()
+                if (url.isEmpty()) {
+                    Toast.makeText(ctx, "Enter a URL", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 val cat = categoryKeys[categorySpinner.selectedItemPosition]
-                val stations = loadStations(prefs)
-                stations.add(Station(name, url, cat))
-                saveStations(prefs, stations)
-                nameInput.setText("")
-                urlInput.setText("")
-                refreshList()
+                if (url.substringBefore("?").lowercase().endsWith(".m3u")) {
+                    importM3u(url, cat, nameInput, urlInput)
+                } else {
+                    if (name.isEmpty()) {
+                        Toast.makeText(ctx, "Enter a station name", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+                    val stations = loadStations(prefs)
+                    stations.add(Station(name, url, cat))
+                    saveStations(prefs, stations)
+                    nameInput.setText("")
+                    urlInput.setText("")
+                    refreshList()
+                }
             }
         }
 
@@ -142,7 +154,7 @@ class StationManagerDialog : DialogFragment() {
                 text = label
                 textSize = 13f
                 setTypeface(null, Typeface.BOLD)
-                setTextColor(0xFF506169.toInt())
+                setTextColor(0xFFC9D1D9.toInt())
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
                 ).also {
@@ -166,7 +178,7 @@ class StationManagerDialog : DialogFragment() {
                 val nameView = TextView(ctx).apply {
                     text = station.name
                     textSize = 14f
-                    setTextColor(if (isSelected) 0xFF506169.toInt() else 0xFF333333.toInt())
+                    setTextColor(0xFFC9D1D9.toInt())
                     if (isSelected) setTypeface(null, Typeface.BOLD)
                     layoutParams = LinearLayout.LayoutParams(
                         0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
@@ -206,6 +218,42 @@ class StationManagerDialog : DialogFragment() {
                 stationsContainer.addView(row)
             }
         }
+    }
+
+    private fun importM3u(url: String, category: String, nameInput: EditText, urlInput: EditText) {
+        val ctx = requireContext()
+        val handler = Handler(Looper.getMainLooper())
+        Toast.makeText(ctx, "Importing playlist…", Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 15_000
+                conn.setRequestProperty("User-Agent", "RetroPlayer/1.0 (Android)")
+                val content = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val channels = parseM3u(content)
+                handler.post {
+                    if (!isAdded) return@post
+                    if (channels.isEmpty()) {
+                        Toast.makeText(ctx, "No channels found in playlist", Toast.LENGTH_SHORT).show()
+                        return@post
+                    }
+                    val stations = loadStations(prefs)
+                    channels.forEach { (name, streamUrl) -> stations.add(Station(name, streamUrl, category)) }
+                    saveStations(prefs, stations)
+                    nameInput.setText("")
+                    urlInput.setText("")
+                    Toast.makeText(ctx, "Added ${channels.size} channel(s)", Toast.LENGTH_SHORT).show()
+                    refreshList()
+                }
+            } catch (e: Exception) {
+                handler.post {
+                    if (!isAdded) return@post
+                    Toast.makeText(ctx, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private fun dp(value: Int): Int =

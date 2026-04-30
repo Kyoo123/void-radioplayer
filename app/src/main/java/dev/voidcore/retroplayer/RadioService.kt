@@ -10,7 +10,9 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -22,6 +24,8 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
+import java.net.HttpURLConnection
+import java.net.URL
 
 const val ACTION_SERVER_STATUS = "dev.voidcore.retroplayer.SERVER_STATUS"
 const val EXTRA_SERVER_STATUS = "status"
@@ -57,6 +61,10 @@ class RadioService : Service() {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("RetroPlayer/1.0 (Android)")
             .setAllowCrossProtocolRedirects(true)
+            .setDefaultRequestProperties(mapOf(
+                "Icy-MetaData" to "1",
+                "Accept" to "*/*"
+            ))
 
         val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
 
@@ -109,9 +117,58 @@ class RadioService : Service() {
 
     private fun startPlayback(url: String) {
         if (url.isBlank()) return
+        val path = url.substringBefore("?").lowercase()
+        // .m3u8 = HLS, handled natively by ExoPlayer (media3-exoplayer-hls)
+        // .m3u  = plain playlist, must be resolved to the actual stream URL first
+        if (path.endsWith(".m3u") && !path.endsWith(".m3u8")) {
+            resolveM3uAndPlay(url)
+        } else {
+            playDirect(url)
+        }
+    }
+
+    private fun playDirect(url: String) {
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
         player.play()
+    }
+
+    private fun resolveM3uAndPlay(m3uUrl: String) {
+        val handler = Handler(Looper.getMainLooper())
+        Thread {
+            try {
+                val conn = URL(m3uUrl).openConnection() as HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 15_000
+                conn.setRequestProperty("User-Agent", "RetroPlayer/1.0 (Android)")
+                conn.setRequestProperty("Accept", "*/*")
+                conn.instanceFollowRedirects = true
+                val contentType = conn.contentType?.lowercase() ?: ""
+                val content = conn.inputStream.bufferedReader().use { it.readText() }
+                val finalUrl = conn.url.toString()
+                conn.disconnect()
+
+                val looksLikeM3u = contentType.contains("mpegurl") ||
+                        content.trimStart().startsWith("#EXTM3U") ||
+                        content.trimStart().startsWith("#EXTINF")
+
+                if (looksLikeM3u) {
+                    val channels = parseM3u(content)
+                    // Skip non-HTTP entries (metadata stubs, local paths, etc.)
+                    val streamUrl = channels.firstOrNull { (_, u) ->
+                        u.startsWith("http://") || u.startsWith("https://")
+                    }?.second
+                    if (streamUrl != null) {
+                        handler.post { startPlayback(streamUrl) }
+                        return@Thread
+                    }
+                }
+                // Not a playlist (server returned audio directly, possibly after a redirect)
+                handler.post { playDirect(finalUrl) }
+            } catch (e: Exception) {
+                broadcastServerStatus("error")
+            }
+        }.start()
     }
 
     private fun createNotification(): Notification {

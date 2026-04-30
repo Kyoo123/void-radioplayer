@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -E \"README|\\\\.md$|\\\\.txt$\")"
+      "Bash(grep -E \"README|\\\\.md$|\\\\.txt$\")",
+      "WebSearch",
+      "WebFetch(domain:fmstream.org)",
+      "WebFetch(domain:marijanbloggt.at)"
     ]
   }
 }

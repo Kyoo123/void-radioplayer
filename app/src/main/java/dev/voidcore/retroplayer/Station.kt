@@ -12,9 +12,9 @@ val defaultStations: List<Station> = listOf(
     Station("BBC Radio 6 Music", "http://stream.live.vc.bbcmedia.co.uk/bbc_6music", "english"),
     Station("KEXP 90.3", "https://kexp-mp3-128.streamguys1.com/kexp128.mp3", "english"),
     // German
-    Station("Ö3", "https://orf-live.ors-shoutcast.at/oe3-q2a.m3u", "german"),
-    Station("Energy", "http://stream1.energy.at:8000/vie.m3u", "german"),
-    Station("Kronehit", "https://secureonair.krone.at/kronehit-hp.mp3", "german"),
+    Station("Ö3", "http://orf-live.ors-shoutcast.at/oe3-q2a", "german"),
+    Station("Energy Wien", "http://stream1.energy.at:8000/vie", "german"),
+    Station("Kronehit", "http://onair.krone.at/kronehit.mp3", "german"),
     // Hungarian
     Station("Retro Radio", "https://icast.connectmedia.hu/5001/live.mp3", "hungarian"),
     Station("Sláger FM", "https://icast.connectmedia.hu/4741/live.mp3", "hungarian"),
@@ -33,6 +33,30 @@ fun loadStations(prefs: SharedPreferences): MutableList<Station> {
     } catch (e: Exception) {
         defaultStations.toMutableList()
     }
+}
+
+fun parseM3u(content: String): List<Pair<String, String>> {
+    val result = mutableListOf<Pair<String, String>>()
+    var pendingName: String? = null
+    for (line in content.lines()) {
+        val trimmed = line.trim()
+        when {
+            trimmed.startsWith("#EXTINF:") -> {
+                pendingName = Regex("""tvg-name="([^"]+)"""").find(trimmed)?.groupValues?.get(1)
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: trimmed.substringAfterLast(",", "").trim().takeIf { it.isNotEmpty() }
+                    ?: "Unknown"
+            }
+            trimmed.isNotEmpty() && !trimmed.startsWith("#") -> {
+                val name = pendingName
+                    ?: trimmed.substringAfterLast("/").substringBefore("?").takeIf { it.isNotEmpty() }
+                    ?: "Unknown"
+                result.add(name to trimmed)
+                pendingName = null
+            }
+        }
+    }
+    return result
 }
 
 fun saveStations(prefs: SharedPreferences, stations: List<Station>) {
