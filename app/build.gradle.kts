@@ -24,12 +24,6 @@ android {
             "\"${property("RETROPLAYER_PRIMARY_STREAM_URL")}\""
         )
 
-        buildConfigField(
-            "String",
-            "FALLBACK_STREAM_URL",
-            "\"${property("RETROPLAYER_FALLBACK_STREAM_URL")}\""
-        )
-
     }
 
     buildTypes {

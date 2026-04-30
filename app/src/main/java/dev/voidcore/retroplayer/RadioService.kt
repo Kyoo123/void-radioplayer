@@ -7,13 +7,10 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -22,8 +19,6 @@ import androidx.media3.session.MediaSession
 
 const val ACTION_SERVER_STATUS = "dev.voidcore.retroplayer.SERVER_STATUS"
 const val EXTRA_SERVER_STATUS = "status"
-const val SERVER_PRIMARY = "Primary"
-const val SERVER_FALLBACK = "Fallback"
 const val CHANNEL_ID = "radio_playback"
 
 @androidx.media3.common.util.UnstableApi
@@ -31,8 +26,6 @@ class RadioService : Service() {
 
     private lateinit var player: ExoPlayer
     private var mediaSession: MediaSession? = null
-    private var usingFallback = false
-    private var currentURL: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -62,17 +55,6 @@ class RadioService : Service() {
             .setHandleAudioBecomingNoisy(true) // Pauses when headphones unplugged
             .build()
 
-        player.addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                Log.e("RadioService", "Playback error on $currentURL", error)
-                if (!usingFallback && currentURL == BuildConfig.PRIMARY_STREAM_URL) {
-                    usingFallback = true
-                    broadcastServerStatus(SERVER_FALLBACK)
-                    startPlayback(BuildConfig.FALLBACK_STREAM_URL)
-                }
-            }
-        })
-
         // 4. Initialize MediaSession
         mediaSession = MediaSession.Builder(this, player).build()
     }
@@ -81,15 +63,13 @@ class RadioService : Service() {
         // Start Foreground immediately to prevent system killing service
         startForeground(1, createNotification())
 
-        usingFallback = false
-        broadcastServerStatus(SERVER_PRIMARY)
+        broadcastServerStatus("playing")
         startPlayback(BuildConfig.PRIMARY_STREAM_URL)
 
         return START_STICKY
     }
 
     private fun startPlayback(url: String) {
-        currentURL = url
         val mediaItem = MediaItem.fromUri(url)
 
         player.setMediaItem(mediaItem)

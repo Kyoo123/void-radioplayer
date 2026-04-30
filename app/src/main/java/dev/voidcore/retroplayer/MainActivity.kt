@@ -72,16 +72,6 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    override fun onResume() {
-        super.onResume()
-
-        sendBroadcast(
-            Intent(ACTION_SERVER_STATUS)
-                .putExtra(EXTRA_SERVER_STATUS, "DEBUG_FROM_ACTIVITY")
-        )
-    }
-
-
     override fun onDestroy() {
         super.onDestroy()
         timeHandler.removeCallbacks(timeRunnable)
